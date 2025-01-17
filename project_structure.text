@@ -1,0 +1,18 @@
+- .env
+- commands
+  - auth.js
+  - createNote.js
+  - deleteNote.js
+  - exportNotes.js
+  - listNotes.js
+  - searchNotes.js
+  - viewNote.js
+- data
+  - db.json
+- index.js
+- package-lock.json
+- package.json
+- readme.md
+- utils
+  - db.js
+  - helpers.js
