@@ -1,6 +1,6 @@
 {
   "name": "kdocs",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "description": "CLI based tool for making notes for CLI enthusiast",
   "license": "ISC",
   "author": "Kartik",
@@ -10,7 +10,7 @@
     "kdocs": "./index.js"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "postinstall": "node postinstall.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
@@ -20,6 +20,7 @@
     "inquirer": "^12.3.2",
     "jsonwebtoken": "^9.0.2",
     "lowdb": "^7.0.1",
-    "open": "^10.1.0"
+    "open": "^10.1.0",
+    "pdf-lib": "^1.17.1"
   }
 }

@@ -2,7 +2,105 @@
 
 import inquirer from 'inquirer';
 import chalk from 'chalk';
-import { getAllNotes, getNoteById, addNote, deleteNoteById, readThemeColor, saveThemeColor, deleteThemeColor, updateNoteById } from './utils/db.js';
+import {
+  getAllNotes,
+  getNoteById,
+  addNote,
+  deleteNoteById,
+  readThemeColor,
+  saveThemeColor,
+  deleteThemeColor,
+  updateNoteById,
+  readInteractionMode,
+  saveInteractionMode,
+  resetInteractionMode,
+  exportNotesToPDF,
+} from './utils/db.js';
+import { execSync } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+
+
+function isCommandAvailable(command) {
+  try {
+    execSync(`command -v ${command}`, { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Open note in an editor (Vim, Nano, etc.)
+
+
+function getEditor() {
+  const editorEnv = process.env.EDITOR;
+  if (editorEnv) {
+    return editorEnv; // Respect the user's configured EDITOR environment variable
+  }
+
+  if (isCommandAvailable('vim')) {
+    return 'vim';
+  } else if (isCommandAvailable('nano')) {
+    return 'nano';
+  } else if (process.platform === 'win32') {
+    return 'notepad'; // Use Notepad on Windows
+  } else {
+    throw new Error(
+      'No suitable editor found! Please install Vim, Nano, or set the EDITOR environment variable.'
+    );
+  }
+}
+
+async function editWithEditor(initialContent = '') {
+  const tempFilePath = path.resolve('temp_note.txt');
+  fs.writeFileSync(tempFilePath, initialContent, 'utf-8');
+  const editor = getEditor();
+  try {
+    execSync(`${editor} ${tempFilePath}`, { stdio: 'inherit' });
+    const content = fs.readFileSync(tempFilePath, 'utf-8').trim();
+    fs.unlinkSync(tempFilePath); // Clean up temp file
+    return content;
+  } catch (error) {
+    console.error(`Error opening editor (${editor}):`, error.message);
+    return null;
+  }
+}
+
+
+async function promptForInteractionMode() {
+  const { mode, savePreference } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'mode',
+      message: 'How would you like to interact?',
+      choices: [
+        { name: 'CLI (Command Line Input)', value: 'cli' },
+        { name: 'Editor (Vim, Nano, etc.)', value: 'editor' },
+      ],
+    },
+    {
+      type: 'confirm',
+      name: 'savePreference',
+      message: 'Would you like to save this choice for future use?',
+      default: false,
+    },
+  ]);
+
+  if (savePreference) {
+    saveInteractionMode(mode);
+  }
+
+  return mode;
+}
+
+async function getInteractionMode() {
+  const savedMode = readInteractionMode();
+  if (savedMode) {
+    return savedMode;
+  }
+  return await promptForInteractionMode();
+}
 
 async function initializeApp() {
   let themeColor = readThemeColor();
@@ -29,16 +127,39 @@ async function initializeApp() {
 }
 
 async function handleCommand(command, themeColor) {
+  if (command === 'exit') {
+    console.log(chalk[themeColor]('Goodbye!'));
+    deleteThemeColor();
+    resetInteractionMode();
+    process.exit(0);
+  }
+  if (command === 'export-pdf') {
+    const notesToExport = await getAllNotes();
+    if (notesToExport.length === 0) {
+      console.log(chalk.red('No notes available to export.'));
+
+    }
+    const pdfPath = path.resolve('all_notes.pdf');
+    try {
+      await exportNotesToPDF(notesToExport, pdfPath);
+      console.log(chalk.green(`All notes exported to PDF successfully! File saved as: ${pdfPath}`));
+    } catch (error) {
+      console.error(chalk.red(`Failed to export notes to PDF: ${error.message}`));
+    }
+  }
+  const mode = await getInteractionMode();
   switch (command) {
     case 'create':
-      const { content } = await inquirer.prompt([
-        {
-          type: 'input',
-          name: 'content',
-          message: chalk[themeColor]('Enter note content:'),
-          validate: (input) => (input.trim() ? true : 'Note content cannot be empty!'),
-        },
-      ]);
+      const content = mode === 'cli'
+        ? await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'content',
+            message: chalk[themeColor]('Enter note content:'),
+            validate: (input) => (input.trim() ? true : 'Note content cannot be empty!'),
+          },
+        ]).then((ans) => ans.content)
+        : await editWithEditor();
       await addNote(content);
       console.log(chalk[themeColor]('Note created successfully!'));
       break;
@@ -104,14 +225,17 @@ async function handleCommand(command, themeColor) {
         console.log(chalk.red(`Note with ID ${updateId} not found.`));
         break; // Exit the update process if the note does not exist
       }
-      const { newContent } = await inquirer.prompt([
-        {
-          type: 'input',
-          name: 'newContent',
-          message: chalk[themeColor]('Enter the new content for the note:'),
-          validate: (input) => (input.trim() !== '' ? true : 'Content cannot be empty!'),
-        },
-      ]);
+      const newContent = mode === 'cli'
+        ? await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'newContent',
+            message: chalk[themeColor]('Enter the new content for the note:'),
+            validate: (input) => (input.trim() !== '' ? true : 'Content cannot be empty!'),
+          },
+        ]).then((ans) => ans.newContent)
+        : await editWithEditor(note1.content);
+
       const updateResult = await updateNoteById(updateId, newContent);
       if (updateResult) {
         console.log(chalk[themeColor](`Note with ID ${updateId} updated.`));
@@ -119,11 +243,6 @@ async function handleCommand(command, themeColor) {
         console.log(chalk.red(`Note with ID ${updateId} not found.`));
       }
       break;
-
-    case 'exit':
-      console.log(chalk[themeColor]('Goodbye!'));
-      deleteThemeColor();
-      process.exit(0);
 
     default:
       console.log(chalk.red('Unknown command. Please try again.'));
@@ -147,6 +266,7 @@ async function runInteractiveCLI() {
           { name: 'Update a specific note 📝', value: 'update' },
           { name: 'Delete a note 🗑️', value: 'delete' },
           { name: 'Exit 🚪', value: 'exit' },
+          { name: 'Export all notes to PDF 📄', value: 'export-pdf' },
         ],
       },
     ]);
@@ -154,6 +274,7 @@ async function runInteractiveCLI() {
     await handleCommand(command, themeColor);
   }
 }
-
 // Start the CLI
 runInteractiveCLI();
+
+resetInteractionMode();
