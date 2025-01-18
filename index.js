@@ -15,6 +15,7 @@ import {
   saveInteractionMode,
   resetInteractionMode,
   exportNotesToPDF,
+  searchNotes,
 } from './utils/db.js';
 import { execSync } from 'child_process';
 import fs from 'fs';
@@ -211,6 +212,27 @@ async function handleCommand(command, themeColor) {
       }
       break;
 
+    case 'search':
+      const { keyword } = await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'keyword',
+          message: chalk[themeColor]('Enter a keyword to search for:'),
+          validate: (input) => input.trim() ? true : 'Keyword cannot be empty!',
+        },
+      ]);
+
+      const results = await searchNotes(keyword);
+      if (results.length === 0) {
+        console.log(chalk.red('No notes found matching the keyword.'));
+      } else {
+        console.log(chalk[themeColor]('Search Results:'));
+        results.forEach((note) => {
+          console.log(chalk[themeColor](`ID: ${note.id}, Content: ${note.content}`));
+        });
+      }
+      break;
+
     case 'update':
       const { updateId } = await inquirer.prompt([
         {
@@ -264,6 +286,7 @@ async function runInteractiveCLI() {
           { name: 'List all notes 📋', value: 'list' },
           { name: 'View a specific note 🔍', value: 'view' },
           { name: 'Update a specific note 📝', value: 'update' },
+          { name: 'Search notes 🔎', value: 'search' },
           { name: 'Delete a note 🗑️', value: 'delete' },
           { name: 'Exit 🚪', value: 'exit' },
           { name: 'Export all notes to PDF 📄', value: 'export-pdf' },

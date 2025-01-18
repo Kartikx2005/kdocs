@@ -226,5 +226,9 @@ export async function exportNotesToPDF(notes, outputPath) {
   return outputPath;
 }
 
-
-
+export async function searchNotes(keyword) {
+  await db.read();
+  return db.data.notes.filter((note) =>
+    note.content.toLowerCase().includes(keyword.toLowerCase())
+  );
+}
